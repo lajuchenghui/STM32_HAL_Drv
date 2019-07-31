@@ -74,7 +74,7 @@ void Infrared_TIM_Capture(void)
 		
 		Infrared_data->TriTime[Infrared_data->TriPolarity] = \
 					HAL_TIM_ReadCapturedValue(&INFRA_HTIM, INFRA_TIM_CH);	
-		Infrared_data->TriTime[Infrared_data->TriPolarity]++;
+		//Infrared_data->TriTime[Infrared_data->TriPolarity]++;
 		/*  此时接收的是同步码低电平  */
 		/*if(Infrared_data->FrameStart == 1) 
 		{
@@ -94,7 +94,7 @@ void Infrared_TIM_Capture(void)
 		{
 			Infrared_data->TriTime[Infrared_data->TriPolarity] = \
 			HAL_TIM_ReadCapturedValue(&INFRA_HTIM, INFRA_TIM_CH);
-			Infrared_data->TriTime[Infrared_data->TriPolarity]++;
+			//Infrared_data->TriTime[Infrared_data->TriPolarity]++;
 		}	
 		
 		if(Infrared_data->FrameStart == 0)
