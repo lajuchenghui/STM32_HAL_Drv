@@ -1,6 +1,9 @@
 #ifndef _Infrared_H
 #define _Infrared_H
- 
+/*
+使用定时器输入捕获功能驱动红外接收
+定时器14 通道1 下降沿触发
+*/
 #include "stm32f0xx_hal.h"
 #include "main.h"
 
