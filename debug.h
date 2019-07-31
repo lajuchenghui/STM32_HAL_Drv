@@ -87,5 +87,6 @@
 
 #define __log(...)          debug_printf(__VA_ARGS__)
 
+int32_t dbg_seek_arg(char *buf, char *buf_dir, int32_t def);
 
 #endif  /* _DBGS_H_ */
