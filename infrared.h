@@ -1,9 +1,15 @@
 #ifndef _Infrared_H
 #define _Infrared_H
+
 /*
+硬件配置：
 使用定时器输入捕获功能驱动红外接收
 定时器14 通道1 下降沿触发
 晶振48M 分频48 周期10000
+使用方法：
+添加初始化函数Infrared_Init
+添加主循环函数Infrared_main_while
+在接收到信号时会触发调用Infrared_Rec_data在里面根据按键值做处理
 */
 #include "stm32f0xx_hal.h"
 #include "main.h"
