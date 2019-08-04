@@ -38,15 +38,6 @@ int32_t byte_buf_seek(int8_t *buf1, int8_t *buf2, int32_t len1, int32_t len2)
 	__wrn("head seek fail\r\n");
 	return -1;
 }
-
-int32_t PC_link_xor_check(int8_t *buf)
-{
-  	if(buf[PC_LINK_BUF_LOC_CHECK] == byte_buf_xor_sum(buf + PC_LINK_BUF_LOC_FEATURE, 18))
-	{
-		return 0;
-	}
-	return -1;
-}
 /**********************************************************************************************************
 *	函 数 名: byte_buf_xor_sum
 *	功能说明: 从一段byte数组buf进行异或校验
