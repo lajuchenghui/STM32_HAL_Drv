@@ -19,23 +19,29 @@
 #define TIM_CH_NUM						1
 #define INFRA_TIM_CH 					TIM_CHANNEL_1
 #define RangJudge(val,min,max)  	(val > min ? (val < max ? 1 : 0) : 0)
+
+/*  长按至松开的检测间隔  */
+#define INFRARED_KEY_CHECK_MS			20//ms
  
 typedef struct
 {
 	uint32_t	TriPolarity;
 	uint32_t	FrameStart;
 	uint32_t	TriTime[2];  //记录电平持续时间 0：低电平  1:高电平
-    uint32_t	Key_tmp;   //记录32位地址以及按键码
-	uint32_t	DataBit;
-	uint32_t	Key_Count;	
-	uint32_t	rec_flag;
+    uint32_t	Key_Tmp;   //记录32位地址以及按键码
+	uint32_t	Data_Bit;
+	uint32_t	Key_Cnt;	
+	uint32_t 	Key_Cnt_last;
+	uint32_t	Rec_Flag;
 	uint32_t	Key_Num;
 	uint32_t	Key_Addr;
+	uint32_t 	Key_check_ms_cnt;
 }Infrared_data_t;
  
 extern Infrared_data_t  *Infrared_data;
 
 void Infrared_Init(void);
+void Infrared_ms_it(void);
 void Infrared_Rec_data(void);
 void Infrared_main_while(void);
 uint8_t  Infrared_Get_Key_Num(void);
