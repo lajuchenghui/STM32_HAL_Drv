@@ -17,7 +17,26 @@ void Infrared_Init(void)
 	Infrared_data->TriPolarity = 0;
 	Infrared_data->FrameStart = 0;
 }
-
+/**********************************************************************************************************
+*	函 数 名: Infrared_ms_it
+*	功能说明: 放进主循环进行状态判断
+*	传    参: 
+*	返 回 值: 
+*	说    明: 
+*********************************************************************************************************/
+void Infrared_ms_it(void)
+{
+  	if(Infrared_data->Rec_Flag == 1)
+	{
+		Infrared_data->Key_check_ms_cnt++;
+		if(Infrared_data->Key_check_ms_cnt > INFRARED_KEY_CHECK_MS)
+		{
+			Infrared_data->Key_check_ms_cnt = 0;
+			Infrared_data->Rec_Flag = 2;
+		}
+	}
+	
+}
 /**********************************************************************************************************
 *	函 数 名: Infrared_Rec_data
 *	功能说明: 接收到红外信号后触发事件得到按键码
@@ -29,7 +48,19 @@ void Infrared_Rec_data(void)
 {
 	Infrared_data->Key_Num = Infrared_Get_Key_Addr();
 	Infrared_data->Key_Addr = Infrared_Get_Key_Num();
-	Infrared_data->Key_Count = Infrared_Get_Key_Cnt();
+	Infrared_data->Key_Cnt = Infrared_Get_Key_Cnt();
+	
+	/*  长按过程中一直会执行  */
+	if(Infrared_data->Key_Cnt != Infrared_data->Key_Cnt_last)
+	{
+		Infrared_data->Rec_Flag = 1;
+		Infrared_data->Key_Cnt_last = Infrared_data->Key_Cnt;
+	}
+	else
+	{
+		/*  松开后执行  */
+		Infrared_data->Rec_Flag = 0;
+	}
 }
 
 /**********************************************************************************************************
@@ -41,10 +72,10 @@ void Infrared_Rec_data(void)
 *********************************************************************************************************/
 void Infrared_main_while(void)
 {
-	if(Infrared_data->rec_flag == 0)
+	if(Infrared_data->Rec_Flag != 2)
 		return;
-	Infrared_data->rec_flag = 0;
 	Infrared_Rec_data();
+	
 }
 
 /**********************************************************************************************************
@@ -57,8 +88,8 @@ void Infrared_main_while(void)
 uint8_t  Infrared_Get_Key_Num(void)
 {
    //通过与反码异或，验证按键码的正确性
-   if((uint8_t)((Infrared_data->Key_tmp >> 24) ^ (Infrared_data->Key_tmp >> 16)) == 0xff)
-   return (uint8_t)(Infrared_data->Key_tmp >> 16);
+   if((uint8_t)((Infrared_data->Key_Tmp >> 24) ^ (Infrared_data->Key_Tmp >> 16)) == 0xff)
+   return (uint8_t)(Infrared_data->Key_Tmp >> 16);
 	 
    else  return 0;
 }
@@ -72,8 +103,8 @@ uint8_t  Infrared_Get_Key_Num(void)
 *********************************************************************************************************/
 uint8_t  Infrared_Get_Key_Addr(void)
 {
-   if((uint8_t)((Infrared_data->Key_tmp ) ^ (Infrared_data->Key_tmp >> 8)) == 0xff)
-   return (uint8_t)(Infrared_data->Key_tmp);
+   if((uint8_t)((Infrared_data->Key_Tmp ) ^ (Infrared_data->Key_Tmp >> 8)) == 0xff)
+   return (uint8_t)(Infrared_data->Key_Tmp);
 	 
    else  return 0;
 }
@@ -87,7 +118,7 @@ uint8_t  Infrared_Get_Key_Addr(void)
 *********************************************************************************************************/
 uint32_t Infrared_Get_Key_Cnt(void)
 {
-	return Infrared_data->Key_Count;
+	return Infrared_data->Key_Cnt;
 }
  
 /**********************************************************************************************************
@@ -171,14 +202,14 @@ void Infrared_TIM_Capture(void)
 	if(RangJudge(Infrared_data->TriTime[0],8500,9500) && \
 			RangJudge(Infrared_data->TriTime[1],4000,5500) ) 
 	{
-		Infrared_data->Key_tmp = 0;  //同步码
-		Infrared_data->Key_Count = 0;  
-		Infrared_data->DataBit = 0;  		
+		Infrared_data->Key_Tmp = 0;  //同步码
+		Infrared_data->Key_Cnt = 0;  
+		Infrared_data->Data_Bit = 0;  		
 	}		
 	else if(RangJudge(Infrared_data->TriTime[0],8500,9500) && \
 					RangJudge(Infrared_data->TriTime[1],2000,3000) ) 
 	{
-		if(++Infrared_data->Key_Count > 250) Infrared_data->Key_Count = 250;    //连发码
+		if(++Infrared_data->Key_Cnt > 250) Infrared_data->Key_Cnt = 250;    //连发码
 	}
 	
 	/********************************* 接收数据 *********************************/		
@@ -188,20 +219,20 @@ void Infrared_TIM_Capture(void)
 		if(RangJudge(Infrared_data->TriTime[0],450,650) && \
 					RangJudge(Infrared_data->TriTime[1],450,650) ) 
 		{
-			Infrared_data->Key_tmp &= ~(1 << Infrared_data->DataBit++);
+			Infrared_data->Key_Tmp &= ~(1 << Infrared_data->Data_Bit++);
 		}
 		
 		else if(RangJudge(Infrared_data->TriTime[0],450,650) && \
 						RangJudge(Infrared_data->TriTime[1],1450,1750) ) 
 		{
-			Infrared_data->Key_tmp |= (1 << Infrared_data->DataBit++);
+			Infrared_data->Key_Tmp |= (1 << Infrared_data->Data_Bit++);
 		}
 	}	
 	/*  接收完成  */
-	if(Infrared_data->DataBit >= 32)
+	if(Infrared_data->Data_Bit >= 32)
 	{
-		Infrared_data->DataBit = 0;
-		Infrared_data->rec_flag = 1;
+		Infrared_data->Data_Bit = 0;
+		Infrared_data->Rec_Flag = 1;
 	}
 	
 }
