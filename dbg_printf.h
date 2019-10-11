@@ -1,13 +1,19 @@
-#ifndef _DBGS_H_
-#define _DBGS_H_
-
-#include "stdio.h"
+#ifndef _DBG_PRINTF_H_
+#define _DBG_PRINTF_H_
+/*
+通过配置一个uart进行printf打印
+可以分打印等级 可以打印出函数所在文件路径和行号
+在keil中要打开microlib 在iar中general options的library config中的库等级设置为full
+*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "stm32f0xx_hal.h"
 
-//#define printf
+
 #define debug_printf					printf
 
-#define EPDK_DEBUG_LEVEL_GATE        	4
+#define EPDK_DEBUG_LEVEL_GATE        	3
 
 #define EPDK_DEBUG_LEVEL_NOCHECK     	0            /* No run time checks are performed                             */
 #define EPDK_DEBUG_LEVEL_CHECK_ALL   	1            /* Parameter checks and consistency checks are performed        */
@@ -84,5 +90,8 @@
 
 #define __log(...)          debug_printf(__VA_ARGS__)
 
+int32_t dbg_seek_arg(char *buf, char *buf_dir, int32_t def);
+
+int32_t isLetter(char c);
 
 #endif  /* _DBGS_H_ */
