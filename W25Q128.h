@@ -69,13 +69,6 @@ FF0000h - FFFFFFh 64KBytes block 255
 
 #define W25_READ_DATA					0x03
 
-#define W25_SECTOR_NUM1_ADDR			0
-#define W25_SECTOR_NUM2_ADDR			0x1000
-#define W25_SECTOR_NUM3_ADDR			0x2000
-#define W25_SECTOR_NUM4_ADDR			0x3000
-#define W25_SECTOR_NUM5_ADDR			0x4000
-
-
 extern SPI_HandleTypeDef SPI_HANDLE;
 
 uint32_t W25_Read_write_Test(void);
