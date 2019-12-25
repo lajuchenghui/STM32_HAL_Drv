@@ -21,9 +21,7 @@ W25Q128FV (QPI Mode)  	17h  					6018h
 ...
 FF0000h - FFFFFFh 64KBytes block 255
 */
-/*
-spi²¨ÌØÂÊ¹ý¸ßµ¼ÖÂÎÞ·¨¶ÁÐ´ Õý³£¶ÁÐ´²¨ÌØÂÊ1.4Mbits
-*/
+
 #include "stm32f4xx_hal.h"
 #include "dbg_printf.h"
 
@@ -35,9 +33,9 @@ spi²¨ÌØÂÊ¹ý¸ßµ¼ÖÂÎÞ·¨¶ÁÐ´ Õý³£¶ÁÐ´²¨ÌØÂÊ1.4Mbits
  
 #define W25_SECTOR_COUNT				4096
 #define W25_BLOCK_SIZE					65536
-/*  ÕâÁ½¸ö¼ÓÆðÀ´±ØÐëµÈÓÚ4096  */
-#define SPI_FLASH_FAT_START_SECTOR   	0       // ÔÚÊ¹ÓÃFATFSºÍUdisk IO²Ù×÷flashµÄ Æ«ÒÆÁ¿
-#define SPI_FLASH_FAT_SECTOR_COUNT   	4096    // ³ýÈ¥Æ«ÒÆÁ¿µÄÉÈÇø¸öÊý 
+/*  è¿™ä¸¤ä¸ªåŠ èµ·æ¥å¿…é¡»ç­‰äºŽ4096  */
+#define SPI_FLASH_FAT_START_SECTOR   	0       // åœ¨ä½¿ç”¨FATFSå’ŒUdisk IOæ“ä½œflashçš„ åç§»é‡
+#define SPI_FLASH_FAT_SECTOR_COUNT   	4096    // é™¤åŽ»åç§»é‡çš„æ‰‡åŒºä¸ªæ•° 
 
 #define SPI_FLASH_ENABLE()						HAL_GPIO_WritePin(GPIOF, GPIO_PIN_6, GPIO_PIN_RESET)
 #define SPI_FLASH_DISABLE()						HAL_GPIO_WritePin(GPIOF, GPIO_PIN_6, GPIO_PIN_SET)
