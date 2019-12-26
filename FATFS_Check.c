@@ -42,7 +42,7 @@ uint32_t FATFS_mount(FATFS *fs, const TCHAR *path)
 	f_res = f_mount(fs, path, 0);
 	
     /*  没有文件系统 开始格式化  */
-    if(f_res != FR_NO_FILESYSTEM)
+    if(f_res == FR_NO_FILESYSTEM)
     {
         f_res = fatfs_format_disk(fs, path);
         
