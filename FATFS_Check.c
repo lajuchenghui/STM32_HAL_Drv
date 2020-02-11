@@ -9,42 +9,368 @@
 uint32_t SPI_Flash_FATFS_Init(FATFS *fs, const char *disk_path)
 {
     /*  path空间大小影响文件扫描 当存在文件名大于path空间大小 程序卡死  */
-    uint8_t path[100] = {0};
   
-    memcpy(path, disk_path, strlen(disk_path));
-  
-	if(FATFS_mount(fs, disk_path) != 1)return 0;
+    if(FATFS_mount(fs, disk_path) != 1)return 0;
         
-	if(FATFS_write_read_test() != 1)return 0;
+    if(FATFS_write_read_test(disk_path) != 1)return 0;
 	
-    if(FATFS_seek_printf_test(fs) != 1)return 0;
+    if(FATFS_seek_printf_test(fs, disk_path) != 1)return 0;
 
-    if(FATFS_opendir_test() != 1)return 0;
+    if(FATFS_opendir_test(disk_path) != 1)return 0;
     
-    FATFS_scan_disk(path);
+    FATFS_scan_disk(disk_path);
     
     return 1;
     /*  fat write read test end  */
 }
 
+uint32_t SDRAM_FATFS_Init(FATFS *fs, const char *disk_path)
+{
+	uint32_t tot,fre;
+	
+	
+	FATFS_mount(fs, disk_path);
+    FATFS_format_disk(fs, disk_path);
+	FATFS_file_cpy(disk_path, (const char *)USERPath, "img_p1.bin");
+	FATFS_file_cpy(disk_path, (const char *)USERPath, "img_p2.bin");
+	FATFS_scan_disk(disk_path);
+		
+	FATFS_getfree(fs, disk_path , &tot, &fre);
+
+	return 1;
+}
+
+uint32_t FATFS_file_to_flash(uint32_t dst_addr, const char *src_path, const char *file_name)
+{
+	FIL file_src;
+	FRESULT f_res; 
+	uint32_t fnum;
+	uint32_t file_size;
+	uint32_t cpy_cnt;
+	uint32_t cpy_remainder;
+	uint32_t i,j;
+	/*  放在SDRAM 最大256KBytes  */
+	uint32_t buf_cpy[FILE_CPY_BUF_SIZE];
+	
+	uint8_t src_file_path[40] = {0};
+    uint8_t dst_file_path[40] = {0};
+	
+	__msg("FATFS_file_to_flash dst_addr == 0x%x src_path == %s file_name == %s\r\n", dst_addr, src_path, file_name);
+	if((src_path == NULL) || (file_name == NULL))
+	{
+		__msg("FATFS_file_cpy arg err\r\n");
+		return 0;
+	}
+	
+	sprintf(src_file_path, "%s%s", src_path, file_name);
+	/*  打开源文件  */
+	f_res = f_open(&file_src, src_file_path, FA_OPEN_EXISTING | FA_READ);
+	if(f_res != FR_OK)
+    {
+        __msg("FATFS open source file fail\r\n");
+        printf_fatfs_error(f_res);
+        return 0;
+    }
+	
+	/*  得到大小并分割  */
+    file_size = f_size(&file_src);
+    __msg("file size == %lu B\r\n", file_size);
+	cpy_cnt = file_size / FILE_CPY_BUF_SIZE;
+	cpy_remainder = file_size % FILE_CPY_BUF_SIZE;
+	__msg("FATFS_file_cpy source file cpy_cnt == %d cpy_remainder == %d\r\n", cpy_cnt, cpy_remainder);
+	/*  要复制的大小大于缓冲 需要分多次来复制  */
+	if(file_size > FILE_CPY_BUF_SIZE)
+	{
+		for(i=0;i<cpy_cnt;i++)
+		{
+            __msg("f_read start\r\n");
+			f_res = f_read(&file_src, buf_cpy, FILE_CPY_BUF_SIZE, &fnum); 
+			if(f_res != FR_OK)
+			{
+				__msg("FATFS read file fail\r\n");
+				printf_fatfs_error(f_res);
+				return 0;
+			}
+			__msg("FATFS read file secc\r\n");
+			__msg("source file read bytes == %u B\r\n", fnum);
+			
+			//write	flash
+            W25_Flash_Write_Sector(dst_addr + i, buf_cpy);
+			
+			f_res = f_lseek(&file_src, FILE_CPY_BUF_SIZE * (i + 1));
+			if(f_res != FR_OK)
+			{
+				__msg("FATFS seek file fail\r\n");
+				printf_fatfs_error(f_res);
+				return 0;
+			}
+			__msg("FATFS seek file secc\r\n");
+			
+		}
+		
+		if(cpy_remainder != 0)
+		{   
+            /*  不够一个扇区的 填充1个扇区  */
+            for(j=0;j<FILE_CPY_BUF_SIZE-cpy_remainder;j++)
+            {
+                buf_cpy[cpy_remainder + j] = 0xff;
+            }
+            
+			f_res = f_read(&file_src, buf_cpy, cpy_remainder, &fnum); 
+			if(f_res != FR_OK)
+			{
+				__msg("FATFS read file fail\r\n");
+				printf_fatfs_error(f_res);
+				return 0;
+			}
+			__msg("FATFS read file secc\r\n");
+			__msg("source file read bytes == %u B\r\n", fnum);
+			
+            //write	flash
+            W25_Flash_Write_Sector(dst_addr + i, buf_cpy);
+            
+			__msg("destination file write bytes == %u B\r\n", fnum);	
+		}
+		
+	}
+    /*  要复制的大小 小于或等于缓冲 不需要分多次来复制  */
+	else if(file_size != 0)
+	{
+        /*  不够一个扇区的 填充1个扇区  */
+        for(j=0;j<FILE_CPY_BUF_SIZE-file_size;j++)
+        {
+            buf_cpy[file_size + j] = 0xff;
+        }
+            
+		f_res = f_read(&file_src, buf_cpy, file_size, &fnum); 
+		if(f_res != FR_OK)
+		{
+			__msg("FATFS read file fail\r\n");
+			printf_fatfs_error(f_res);
+			return 0;
+		}
+		__msg("FATFS read file secc\r\n");
+		__msg("source file read bytes == %u B\r\n", fnum);
+		
+		//write	flash
+        W25_Flash_Write_Sector(dst_addr + i + 1, buf_cpy);
+		__msg("destination file write bytes == %u B\r\n", fnum);
+		
+	}
+	/*  关闭文件  */
+	f_res = f_close(&file_src);
+	if(f_res != FR_OK)
+    {
+        __msg("FATFS clost file fail\r\n");
+        printf_fatfs_error(f_res);
+        return 0;
+    }
+	__msg("FATFS clost file secc\r\n");
+
+
+	return 1;
+}
+
+uint32_t FATFS_file_cpy(const char *dst_path, const char *src_path, const char *file_name)
+{
+	FIL file_dst;
+	FIL file_src;
+	FRESULT f_res; 
+	uint32_t fnum;
+	uint32_t file_size;
+	uint32_t cpy_cnt;
+	uint32_t cpy_remainder;
+	uint32_t i;
+	/*  放在SDRAM 最大256KBytes  */
+	uint32_t buf_cpy[FILE_CPY_BUF_SIZE];
+	
+	uint8_t src_file_path[40] = {0};
+    uint8_t dst_file_path[40] = {0};
+	
+	__msg("FATFS_file_cpy dst_path == %s src_path == %s file_name == %s\r\n", dst_path, src_path, file_name);
+	if((dst_path == NULL) || (src_path == NULL) || (file_name == NULL))
+	{
+		__msg("FATFS_file_cpy arg err\r\n");
+		return 0;
+	}
+	
+	sprintf(dst_file_path, "%s%s", dst_path, file_name);
+	sprintf(src_file_path, "%s%s", src_path, file_name);
+	/*  打开源文件  */
+	f_res = f_open(&file_src, src_file_path, FA_OPEN_EXISTING | FA_READ);
+	if(f_res != FR_OK)
+    {
+        __msg("FATFS open source file fail\r\n");
+        printf_fatfs_error(f_res);
+        return 0;
+    }
+	__msg("FATFS open source file secc\r\n");
+	/*  打开目标文件  */
+	f_res = f_open(&file_dst, dst_file_path, FA_CREATE_ALWAYS  | FA_WRITE);
+	if(f_res != FR_OK)
+    {
+        __msg("FATFS open destination file fail\r\n");
+        printf_fatfs_error(f_res);
+        return 0;
+    }
+	__msg("FATFS open destination file secc\r\n");
+	/*  得到大小并分割  */
+    file_size = f_size(&file_src);
+    __msg("file size == %u B\r\n", file_size);
+	cpy_cnt = file_size / FILE_CPY_BUF_SIZE;
+	cpy_remainder = file_size % FILE_CPY_BUF_SIZE;
+	__msg("FATFS_file_cpy source file cpy_cnt == %d cpy_remainder == %d\r\n", cpy_cnt, cpy_remainder);
+	/*  要复制的大小大于缓冲 需要分多次来复制  */
+	if(file_size > FILE_CPY_BUF_SIZE)
+	{
+		for(i=0;i<cpy_cnt;i++)
+		{
+			f_res = f_read(&file_src, buf_cpy, FILE_CPY_BUF_SIZE, &fnum); 
+			if(f_res != FR_OK)
+			{
+				__msg("FATFS read file fail\r\n");
+				printf_fatfs_error(f_res);
+				return 0;
+			}
+			__msg("FATFS read file secc\r\n");
+			__msg("source file read bytes == %u B\r\n", fnum);
+			
+			f_res = f_write(&file_dst, buf_cpy, FILE_CPY_BUF_SIZE, &fnum); 
+			if(f_res != FR_OK)
+			{
+				__msg("FATFS write file fail\r\n");
+				printf_fatfs_error(f_res);
+				return 0;
+			}
+			__msg("FATFS write file secc\r\n");
+			__msg("destination file write bytes == %u B\r\n", fnum);	
+			
+			f_res = f_lseek(&file_src, FILE_CPY_BUF_SIZE * (i + 1));
+			if(f_res != FR_OK)
+			{
+				__msg("FATFS seek file fail\r\n");
+				printf_fatfs_error(f_res);
+				return 0;
+			}
+			__msg("FATFS seek file secc\r\n");
+			
+			f_res = f_lseek(&file_dst, FILE_CPY_BUF_SIZE * (i + 1));
+			if(f_res != FR_OK)
+			{
+				__msg("FATFS seek file fail\r\n");
+				printf_fatfs_error(f_res);
+				return 0;
+			}
+			__msg("FATFS seek file secc\r\n");
+		}
+		
+		if(cpy_remainder != 0)
+		{
+			f_res = f_read(&file_src, buf_cpy, cpy_remainder, &fnum); 
+			if(f_res != FR_OK)
+			{
+				__msg("FATFS read file fail\r\n");
+				printf_fatfs_error(f_res);
+				return 0;
+			}
+			__msg("FATFS read file secc\r\n");
+			__msg("source file read bytes == %u B\r\n", fnum);
+			
+			f_res = f_write(&file_dst, buf_cpy, cpy_remainder, &fnum); 
+			if(f_res != FR_OK)
+			{
+				__msg("FATFS write file fail\r\n");
+				printf_fatfs_error(f_res);
+				return 0;
+			}
+			__msg("FATFS write secc fail\r\n");
+			__msg("destination file write bytes == %u B\r\n", fnum);	
+		}
+		
+	}
+    /*  要复制的大小小于或等于缓冲 不需要分多次来复制  */
+	else
+	{
+		f_res = f_read(&file_src, buf_cpy, file_size, &fnum); 
+		if(f_res != FR_OK)
+		{
+			__msg("FATFS read file fail\r\n");
+			printf_fatfs_error(f_res);
+			return 0;
+		}
+		__msg("FATFS read file secc\r\n");
+		__msg("source file read bytes == %u B\r\n", fnum);
+		
+		f_res = f_write(&file_dst, buf_cpy, file_size, &fnum); 
+		if(f_res != FR_OK)
+		{
+			__msg("FATFS write file fail\r\n");
+			printf_fatfs_error(f_res);
+			return 0;
+		}
+		__msg("FATFS write secc fail\r\n");
+		__msg("destination file write bytes == %u B\r\n", fnum);
+		
+	}
+	/*  关闭文件  */
+	f_res = f_close(&file_src);
+	if(f_res != FR_OK)
+    {
+        __msg("FATFS clost file fail\r\n");
+        printf_fatfs_error(f_res);
+        return 0;
+    }
+	__msg("FATFS clost file secc\r\n");
+	f_res = f_close(&file_dst);
+	if(f_res != FR_OK)
+    {
+        __msg("FATFS clost file fail\r\n");
+        printf_fatfs_error(f_res);
+        return 0;
+    }
+	__msg("FATFS clost file secc\r\n");
+
+	return 1;
+}
+
+/*
+FATFS系统会占用0-0x46的扇区（0-70）
+*/
+uint32_t FATFS_sector_cpy(const Diskio_drvTypeDef *dst, const Diskio_drvTypeDef *src, uint32_t num)
+{
+    uint32_t i;
+    uint8_t buf[4096];
+    
+    for(i=0;i<num;i++)
+    {   
+        src->disk_read(0, buf, i, 1);
+        dst->disk_write(0, buf, i, 1);
+    }
+    
+	return 1;
+}
 /**
   * 函数功能: 文件系统挂载
   * 输入参数: FATFS文件系统 path文件系统路径
   * 返 回 值: fail:0 secc:1
   * 说    明: 无
   */
-uint32_t FATFS_mount(FATFS *fs, const TCHAR *path)
+uint32_t FATFS_mount(FATFS *fs, const char *path)
 {
+    FIL file;
     FRESULT f_res; 
+    const char test_file[] = "test.txt";
+    char test_file_path[20] = {0};
+    
     /*  fat mount  */
-    printf("////////////////////////////////////\r\n"); 
-    printf("FATFS mount start\r\n"); 
+    __msg("////////////////////////////////////\r\n"); 
+    __msg("FATFS mount start\r\n"); 
 	f_res = f_mount(fs, path, 0);
 	
     /*  没有文件系统 开始格式化  */
     if(f_res == FR_NO_FILESYSTEM)
     {
-        f_res = fatfs_format_disk(fs, path);
+        f_res = FATFS_format_disk(fs, path);
         
         if(f_res != FR_OK)
         {
@@ -54,7 +380,7 @@ uint32_t FATFS_mount(FATFS *fs, const TCHAR *path)
     }
     else if(f_res == FR_OK)
     {
-        printf("FATFS mount secc\r\n"); 
+        __msg("FATFS mount secc\r\n"); 
     }
     else
     {
@@ -62,8 +388,46 @@ uint32_t FATFS_mount(FATFS *fs, const TCHAR *path)
         return 0;
     }
     
-    printf("FATFS mount end\r\n"); 
-    printf("////////////////////////////////////\r\n"); 
+    sprintf(test_file_path, "%s%s", path, test_file);
+    f_res = f_open(&file, test_file_path,FA_CREATE_ALWAYS | FA_WRITE );
+    if(f_res == FR_NO_FILESYSTEM)
+    {
+        printf_fatfs_error(f_res);   
+        __msg("FATFS open fail start format\r\n"); 
+        f_res = FATFS_format_disk(fs, path);
+        if(f_res != FR_OK)
+        {
+            printf_fatfs_error(f_res); 
+            return 0;
+        }
+    }else if(f_res == FR_OK)
+    {
+        __msg("FATFS open file secc\r\n"); 
+        
+        f_res = f_close(&file);
+        if(f_res != FR_OK)
+        {
+            __msg("FATFS close file fail\r\n");
+            printf_fatfs_error(f_res);
+            
+            return 0;
+        }
+    }
+    else
+    {
+        printf_fatfs_error(f_res);
+    } 
+    
+    if(f_res != FR_OK)
+    {
+        __msg("FATFS open file fail\r\n");
+        printf_fatfs_error(f_res);
+        
+        return 0;
+    }
+    
+    __msg("FATFS mount end\r\n"); 
+    __msg("////////////////////////////////////\r\n"); 
     return 1;
 }
 
@@ -73,91 +437,92 @@ uint32_t FATFS_mount(FATFS *fs, const TCHAR *path)
   * 返 回 值: fail:0 secc:1
   * 说    明: 无
   */
-uint32_t FATFS_write_read_test(void)
+uint32_t FATFS_write_read_test(const char *path)
 {
     FIL file;
 	FRESULT f_res; 
 	UINT fnum;
-	
-    const TCHAR file_path[] = "0:/test.txt";
+    const char test_file[] = "test.txt";
+    char test_file_path[20] = {0};
 	uint8_t file_write_buff[FILE_TEST_BUF_NUM] = "0123456789abcdef";
 	uint8_t file_read_buff[FILE_TEST_BUF_NUM] = {0};
     
-    printf("////////////////////////////////////\r\n"); 
-    printf("FATFS write read test start\r\n");
-	f_res = f_open(&file, file_path,FA_CREATE_ALWAYS | FA_WRITE );
+    sprintf(test_file_path, "%s%s", path, test_file);
+    __msg("////////////////////////////////////\r\n"); 
+    __msg("FATFS write read test start\r\n");
+	f_res = f_open(&file, test_file_path,FA_CREATE_ALWAYS | FA_WRITE );
     
     if(f_res != FR_OK)
     {
-        printf("FATFS open file fail\r\n");
+        __msg("FATFS open file fail\r\n");
         printf_fatfs_error(f_res);
         
         return 0;
     }
     
-    printf("FATFS open create file secc\r\n");
+    __msg("FATFS open create file secc\r\n");
     
     f_res = f_write(&file, file_write_buff, FILE_TEST_BUF_NUM, &fnum);
     
     if(f_res != FR_OK)
     {
-        printf("FATFS write file fail\r\n");
+        __msg("FATFS write file fail\r\n");
         printf_fatfs_error(f_res);
         return 0;
     }
     
-    printf("FATFS write file secc\r\n");
-    printf("write num == %d\r\n", FILE_TEST_BUF_NUM);
-    printf("write secc num == %d\r\n", fnum);
+    __msg("FATFS write file secc\r\n");
+    __msg("write num == %d\r\n", FILE_TEST_BUF_NUM);
+    __msg("write secc num == %d\r\n", fnum);
     
 	f_res = f_close(&file);
     
     if(f_res != FR_OK)
     {
-        printf("FATFS close file fail\r\n");
+        __msg("FATFS close file fail\r\n");
         printf_fatfs_error(f_res);
         return 0;
     }
     
-    printf("FATFS close file secc\r\n");
+    __msg("FATFS close file secc\r\n");
     
     /*  fat read test  */
-	printf("FATFS read test\r\n");
-	f_res = f_open(&file, file_path, FA_OPEN_EXISTING | FA_READ);
+	__msg("FATFS read test\r\n");
+	f_res = f_open(&file, test_file_path, FA_OPEN_EXISTING | FA_READ);
     
     if(f_res != FR_OK)
     {
-        printf("FATFS open file fail\r\n");
+        __msg("FATFS open file fail\r\n");
         printf_fatfs_error(f_res);
         return 0;
     }
    
-    printf("FATFS open file secc\r\n");
+    __msg("FATFS open file secc\r\n");
     f_res = f_read(&file, file_read_buff, FILE_TEST_BUF_NUM, &fnum); 
     
     if(f_res != FR_OK)
     {
-        printf("FATFS read file fail\r\n");
+        __msg("FATFS read file fail\r\n");
         printf_fatfs_error(f_res);
         return 0;
     }
     
-    printf("FATFS read file secc\r\n");
-    printf("read num == %d\r\n", FILE_TEST_BUF_NUM);
-	printf("read secc num == %d\r\n", fnum);
+    __msg("FATFS read file secc\r\n");
+    __msg("read num == %d\r\n", FILE_TEST_BUF_NUM);
+	__msg("read secc num == %d\r\n", fnum);
     
 	f_res = f_close(&file);
     
 	if(f_res != FR_OK)
     {
-        printf("FATFS close file fail\r\n");
+        __msg("FATFS close file fail\r\n");
         printf_fatfs_error(f_res);
         return 0;
     }
     
-    printf("FATFS close file secc\r\n");
-    printf("FATFS write read test end\r\n");
-    printf("////////////////////////////////////\r\n"); 
+    __msg("FATFS close file secc\r\n");
+    __msg("FATFS write read test end\r\n");
+    __msg("////////////////////////////////////\r\n"); 
     return 1;
 }
 
@@ -167,61 +532,43 @@ uint32_t FATFS_write_read_test(void)
   * 返 回 值: fail:0 secc:1
   * 说    明: 无
   */
-uint32_t FATFS_seek_printf_test(FATFS *fs)
+uint32_t FATFS_seek_printf_test(FATFS *fs, const char *path)
 {
     FIL file;
-    FATFS *fls = fs;
 	FRESULT f_res; 
 	UINT fnum;
-    DWORD fre_clust;
     DWORD tot_sect;
     DWORD fre_sect;
     uint8_t readbuffer[512] = {0};
-    const TCHAR file_path[] = "0:/test2.txt";
+	const char test_file[] = "test2.txt";
+    char test_file_path[20] = {0};
     
-    /*  文件定位和格式化写入功能测试  */
-    printf("////////////////////////////////////\r\n"); 
-    printf("FATFS f_lseek and f_printf test start\r\n");
+	sprintf(test_file_path, "%s%s", path, test_file);
     
-    /* 获取设备信息和空簇大小 */
-    f_res = f_getfree((const TCHAR *)"/", &fre_clust, &fls);
-    if(f_res != FR_OK)
-    {
-        printf("FATFS getfree file fail\r\n");
-        printf_fatfs_error(f_res);
-        return 0;
-    }
-	printf("FATFS getfree file secc\r\n");
-    
-    /* 计算得到总的扇区个数和空扇区个数 */
-    tot_sect = (fls->n_fatent - 2) * fls->csize;
-    fre_sect = fre_clust * fls->csize;
-    
-    f_res = f_open(&file, file_path, FA_CREATE_ALWAYS|FA_WRITE|FA_READ);
+	FATFS_getfree(fs, path, &tot_sect, &fre_sect);
+    f_res = f_open(&file, test_file_path, FA_CREATE_ALWAYS|FA_WRITE|FA_READ);
     
     if(f_res != FR_OK)
     {
-        printf("FATFS open file fail\r\n");
+        __msg("FATFS open file fail\r\n");
         printf_fatfs_error(f_res);
         return 0;
     }
-	printf("FATFS open file secc\r\n");
-    
+	__msg("FATFS open file secc\r\n");
 	
     /* 格式化写入，参数格式类似printf函数 */
-    
-    f_printf(&file,"-----------Total:%10lu KB\nAvailable:  %10lu KB\n", tot_sect *4, fre_sect *4);
+    f_printf(&file,"-----------Total:%10lu KB\nAvailable:  %10lu KB\n", tot_sect, fre_sect);
     
     /*  文件定位到文件起始位置 */
     f_res = f_lseek(&file,0);
     
     if(f_res != FR_OK)
     {
-        printf("FATFS lseek file fail\r\n");
+        __msg("FATFS lseek file fail\r\n");
         printf_fatfs_error(f_res);
         return 0;
     }
-	printf("FATFS lseek file secc\r\n");
+	__msg("FATFS lseek file secc\r\n");
     
     f_printf(&file,"line head\n");
     
@@ -229,11 +576,11 @@ uint32_t FATFS_seek_printf_test(FATFS *fs)
     f_res = f_lseek(&file,f_size(&file)-1);
     if(f_res != FR_OK)
     {
-        printf("FATFS lseek file fail\r\n");
+        __msg("FATFS lseek file fail\r\n");
         printf_fatfs_error(f_res);
         return 0;
     }
-    printf("FATFS lseek file secc\r\n");
+    __msg("FATFS lseek file secc\r\n");
     
     f_printf(&file,"line tail\n");
     
@@ -241,25 +588,25 @@ uint32_t FATFS_seek_printf_test(FATFS *fs)
     f_res = f_read(&file,readbuffer, f_size(&file), &fnum);
     if(f_res != FR_OK)
     {
-        printf("FATFS read file fail\r\n");
+        __msg("FATFS read file fail\r\n");
         printf_fatfs_error(f_res);
         return 0;
     }
-	printf("FATFS read file secc\r\n");
+	__msg("FATFS read file secc\r\n");
     
-    printf("file content:\n%s\n",readbuffer);
+    __msg("file content:\n%s\n",readbuffer);
     
     f_res = f_close(&file); 
     if(f_res != FR_OK)
     {
-        printf("FATFS close file fail\r\n");
+        __msg("FATFS close file fail\r\n");
         printf_fatfs_error(f_res);
         return 0;
     }
-	printf("FATFS close file secc\r\n");
+	__msg("FATFS close file secc\r\n");
  
-    printf("FATFS f_lseek and f_printf test end\r\n");
-    printf("////////////////////////////////////\r\n"); 
+    __msg("FATFS f_lseek and f_printf test end\r\n");
+    __msg("////////////////////////////////////\r\n"); 
     return 1;
 }
 
@@ -269,32 +616,38 @@ uint32_t FATFS_seek_printf_test(FATFS *fs)
   * 返 回 值: fail:0 secc:1
   * 说    明: 无
   */
-uint32_t FATFS_opendir_test(void)
+uint32_t FATFS_opendir_test(const char *path)
 {
 	FRESULT f_res; 
     DIR dir;
-    //const TCHAR dir_path[] = "0:/TestDir";
-    const TCHAR dir_path[] = "0:/TestDir";
+    const char test_dir[] = "TestDir";
+	const char test_file[] = "test2.txt";
+    char test_dir_path[20] = {0};
+	char test_file1_path[40] = {0};
+	char test_file2_path[20] = {0};
     
+	sprintf(test_dir_path, "%s%s", path, test_dir);
+	sprintf(test_file1_path, "%s%s//testdir.txt", path, test_dir);
+	sprintf(test_file2_path, "%s%s", path, test_file);
     /*  目录创建和重命名功能测试  */
-    printf("////////////////////////////////////\r\n"); 
-    printf("FATFS dir create and rename test start\r\n");
+    __msg("////////////////////////////////////\r\n"); 
+    __msg("FATFS dir create and rename test start\r\n");
     /* 尝试打开目录 */
-    f_res=f_opendir(&dir, dir_path);
+    f_res=f_opendir(&dir, test_dir_path);
     if(f_res != FR_OK)
     {
-        printf("FATFS opendir fail\r\n");
+        __msg("FATFS opendir fail\r\n");
         printf_fatfs_error(f_res);
-        printf("FATFS create dir\r\n");
+        __msg("FATFS create dir\r\n");
         /* 打开目录失败，就创建目录 */
-        f_res = f_mkdir(dir_path);
+        f_res = f_mkdir(test_dir_path);
         if(f_res != FR_OK)
         {
-            printf("FATFS mkdir fail\r\n");
+            __msg("FATFS mkdir fail\r\n");
             printf_fatfs_error(f_res);
             return 0;
         }
-        printf("FATFS mkdir secc\r\n");
+        __msg("FATFS mkdir secc\r\n");
     }
     else
     {
@@ -302,36 +655,62 @@ uint32_t FATFS_opendir_test(void)
         f_res = f_closedir(&dir);
         if(f_res != FR_OK)
         {
-            printf("FATFS close dir fail\r\n");
+            __msg("FATFS close dir fail\r\n");
             printf_fatfs_error(f_res);
             return 0;
         }
-        printf("FATFS close dir secc\r\n");
+        __msg("FATFS close dir secc\r\n");
         
         /* 删除文件 */
-        f_res = f_unlink("TestDir/testdir.txt");
+        f_res = f_unlink(test_file1_path);
         if(f_res != FR_OK)
         {
-            printf("FATFS unlink file fail\r\n");
+            __msg("FATFS unlink file fail\r\n");
             printf_fatfs_error(f_res);
-            return 0;
         }
-        printf("FATFS unlink file secc\r\n");
+        __msg("FATFS unlink file secc\r\n");
     }
     
     /* 重命名并移动文件 */
-    f_res = f_rename("test2.txt","TestDir/testdir.txt");      
+    f_res = f_rename(test_file2_path, test_file1_path);      
     if(f_res != FR_OK)
     {
-        printf("FATFS rename file fail\r\n");
+        __msg("FATFS rename file fail\r\n");
         printf_fatfs_error(f_res);
         return 0;
     }
-    printf("FATFS rename file secc\r\n");
+    __msg("FATFS rename file secc\r\n");
     
-    printf("FATFS dir create and rename test end\r\n");
-    printf("////////////////////////////////////\r\n"); 
+    __msg("FATFS dir create and rename test end\r\n");
+    __msg("////////////////////////////////////\r\n"); 
     return 1;
+}
+
+uint32_t FATFS_getfree(FATFS *fs, const char *path, uint32_t *tot_sect, uint32_t *fre_sect)
+{
+	FATFS *fls = fs;
+	DWORD fre_clust;
+	FRESULT f_res; 
+	
+	/* 获取设备信息和空簇大小 */
+    f_res = f_getfree(path, &fre_clust, &fls);
+    if(f_res != FR_OK)
+    {
+        __msg("FATFS getfree file fail\r\n");
+        printf_fatfs_error(f_res);
+        return 0;
+    }
+	__msg("FATFS getfree file secc\r\n");
+    
+    /* 计算得到总的扇区个数和空扇区个数 */
+    *tot_sect = (fls->n_fatent - 2) * fls->csize;
+    *fre_sect = fre_clust * fls->csize;
+	*tot_sect *= 4;
+	*fre_sect *= 4;
+	
+	__msg("FATFS write: Total:%10lu KB\nAvailable:  %10lu KB\r\n", *tot_sect, *fre_sect);
+	
+	return 1;
 }
 
 /**
@@ -340,13 +719,17 @@ uint32_t FATFS_opendir_test(void)
   * 返 回 值: 1
   * 说    明: 无
   */
-uint32_t FATFS_scan_disk(char* path) 
+uint32_t FATFS_scan_disk(const char* disk_path) 
 {
-    printf("////////////////////////////////////\r\n"); 
-    printf("FATFS scan files start\r\n"); 
+	uint8_t path[100] = {0};
+  
+    memcpy(path, disk_path, strlen(disk_path));
+	
+    __msg("////////////////////////////////////\r\n"); 
+    __msg("FATFS scan files path == %s start\r\n", path); 
     FATFS_scan_files(path);
-    printf("FATFS scan files end\r\n"); 
-    printf("////////////////////////////////////\r\n"); 
+    __msg("FATFS scan files path == %s end\r\n", path); 
+    __msg("////////////////////////////////////\r\n"); 
     
     return 1;
 }
@@ -369,6 +752,7 @@ FRESULT FATFS_scan_files(char* path)
     res = f_opendir(&dir, path); 
     if (res != FR_OK) 
     { 
+		printf_fatfs_error(res);
         return res; 
     }
    
@@ -397,7 +781,7 @@ FRESULT FATFS_scan_files(char* path)
         } 
 		else 
 		{ 
-            printf("%s/%s\n", path, fn);
+            __msg("%s/%s\n", path, fn);
             //输出文件名	
             /*  可以在这里提取特定格式的文件路径  */        
         }//else
@@ -413,42 +797,42 @@ FRESULT FATFS_scan_files(char* path)
   * 返 回 值: 操作结果
   * 说    明: 无
   */
-FRESULT fatfs_format_disk(FATFS *fs, const TCHAR *path)
+FRESULT FATFS_format_disk(FATFS *fs, const TCHAR *path)
 {
 	FRESULT res;
 	uint8_t work_buff[4096] = {0};
 
-	printf("format disk\n");
+	__msg("format disk\n");
 	res = f_mkfs(path, 1, 4096, work_buff, 4096);
 
     if (res != FR_OK)
     {
-        printf("format disk fail\r\n");
+        __msg("format disk fail\r\n");
         printf_fatfs_error(res);
         return res;
     }
-    printf("format_disk OK!\n");    
+    __msg("format_disk OK!\n");    
     
     /*  重新挂载  */
-    printf("mount afresh\n");
-    printf("unmount\n");
+    __msg("mount afresh\n");
+    __msg("unmount\n");
     res = f_mount(0, path, 0);
     if(res != FR_OK)
     {
-        printf("unmount disk fail\r\n");
+        __msg("unmount disk fail\r\n");
         printf_fatfs_error(res);
         return res;
     }
     
-    printf("mount\n");
+    __msg("mount\n");
     res = f_mount(fs, path, 0);
     if(res != FR_OK)
     {
-        printf("mount fail\r\n");
+        __msg("mount fail\r\n");
         printf_fatfs_error(res);
         return res;
     }
-    printf("format disk and mount afresh secc\r\n");
+    __msg("format disk and mount afresh secc\r\n");
     return res;
 }
 
@@ -463,62 +847,62 @@ void printf_fatfs_error(FRESULT fresult)
   switch(fresult)
   {
     case FR_OK:                   //(0)
-      printf("Succeeded\r\n");
+      __msg("Succeeded\r\n");
     break;
     case FR_DISK_ERR:             //(1)
-      printf("A hard error occurred in the low level disk I/O layer\r\n");
+      __msg("A hard error occurred in the low level disk I/O layer\r\n");
     break;
     case FR_INT_ERR:              //(2)
-      printf("Assertion failed\r\n");
+      __msg("Assertion failed\r\n");
     break;
     case FR_NOT_READY:            //(3)
-      printf("The physical drive cannot work\r\n");
+      __msg("The physical drive cannot work\r\n");
     break;
     case FR_NO_FILE:              //(4)
-      printf("Could not find the file\r\n");
+      __msg("Could not find the file\r\n");
     break;
     case FR_NO_PATH:              //(5)
-      printf("Could not find the path\r\n");
+      __msg("Could not find the path\r\n");
     break;
     case FR_INVALID_NAME:         //(6)
-      printf("The path name format is invalid\r\n");
+      __msg("The path name format is invalid\r\n");
     break;
     case FR_DENIED:               //(7)
     case FR_EXIST:                //(8)
-      printf("Access denied due to prohibited access\r\n");
+      __msg("Access denied due to prohibited access\r\n");
     break;
     case FR_INVALID_OBJECT:       //(9)
-      printf("The file/directory object is invalid\r\n");
+      __msg("The file/directory object is invalid\r\n");
     break;
     case FR_WRITE_PROTECTED:      //(10)
-      printf("The physical drive is write protected\r\n");
+      __msg("The physical drive is write protected\r\n");
     break;
     case FR_INVALID_DRIVE:        //(11)
-      printf("The logical drive number is invalid\r\n");
+      __msg("The logical drive number is invalid\r\n");
     break;
     case FR_NOT_ENABLED:          //(12)
-      printf("The volume has no work area\r\n");
+      __msg("The volume has no work area\r\n");
     break;
     case FR_NO_FILESYSTEM:        //(13)
-      printf("There is no valid FAT volume\r\n");
+      __msg("There is no valid FAT volume\r\n");
     break;
     case FR_MKFS_ABORTED:         //(14)
-      printf("The f_mkfs() aborted due to any parameter error\r\n");
+      __msg("The f_mkfs() aborted due to any parameter error\r\n");
     break;
     case FR_TIMEOUT:              //(15)
-      printf("Could not get a grant to access the volume within defined period\r\n");
+      __msg("Could not get a grant to access the volume within defined period\r\n");
     break;
     case FR_LOCKED:               //(16)
-      printf("The operation is rejected according to the file sharing policy\r\n");
+      __msg("The operation is rejected according to the file sharing policy\r\n");
     break;
     case FR_NOT_ENOUGH_CORE:      //(17)
-      printf("LFN working buffer could not be allocated\r\n");
+      __msg("LFN working buffer could not be allocated\r\n");
     break;
     case FR_TOO_MANY_OPEN_FILES:  //(18)
-      printf("Number of open files > _FS_SHARE\r\n");
+      __msg("Number of open files > _FS_SHARE\r\n");
     break;
     case FR_INVALID_PARAMETER:    // (19)
-      printf("Given parameter is invalid\r\n");
+      __msg("Given parameter is invalid\r\n");
     break;
     default:break;
   }
