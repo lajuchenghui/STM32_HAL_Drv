@@ -11,7 +11,7 @@ Infrared_data_t  Infrared_data_S, *Infrared_data = &Infrared_data_S;
 *********************************************************************************************************/
 void Infrared_Init(void)
 {
-    HAL_TIM_IC_Start_IT(&INFRA_HTIM, INFRA_TIM_CH);
+    	HAL_TIM_IC_Start_IT(&INFRA_HTIM, INFRA_TIM_CH);
 	__HAL_TIM_ENABLE_IT(&INFRA_HTIM, TIM_IT_UPDATE);  //使能更新中断
 	
 	Infrared_data->TriPolarity = 0;
@@ -87,11 +87,11 @@ void Infrared_main_while(void)
 *********************************************************************************************************/
 uint8_t  Infrared_Get_Key_Num(void)
 {
-   //通过与反码异或，验证按键码的正确性
-   if((uint8_t)((Infrared_data->Key_Tmp >> 24) ^ (Infrared_data->Key_Tmp >> 16)) == 0xff)
-   return (uint8_t)(Infrared_data->Key_Tmp >> 16);
+   	//通过与反码异或，验证按键码的正确性
+   	if((uint8_t)((Infrared_data->Key_Tmp >> 24) ^ (Infrared_data->Key_Tmp >> 16)) == 0xff)
+   	return (uint8_t)(Infrared_data->Key_Tmp >> 16);
 	 
-   else  return 0;
+   	else  return 0;
 }
  
 /**********************************************************************************************************
@@ -103,10 +103,10 @@ uint8_t  Infrared_Get_Key_Num(void)
 *********************************************************************************************************/
 uint8_t  Infrared_Get_Key_Addr(void)
 {
-   if((uint8_t)((Infrared_data->Key_Tmp ) ^ (Infrared_data->Key_Tmp >> 8)) == 0xff)
-   return (uint8_t)(Infrared_data->Key_Tmp);
+   	if((uint8_t)((Infrared_data->Key_Tmp ) ^ (Infrared_data->Key_Tmp >> 8)) == 0xff)
+   	return (uint8_t)(Infrared_data->Key_Tmp);
 	 
-   else  return 0;
+   	else  return 0;
 }
 
 /**********************************************************************************************************
@@ -131,7 +131,7 @@ uint32_t Infrared_Get_Key_Cnt(void)
 void Infrared_TIM_Period(void)
 {
 	Infrared_data->TriPolarity = 0;
-    Infrared_data->FrameStart = 0;
+    	Infrared_data->FrameStart = 0;
 	Infrared_data->TriTime[0] = 0;
 	Infrared_data->TriTime[1] = 0;
 }
@@ -246,16 +246,16 @@ void Infrared_TIM_Capture(void)
 *********************************************************************************************************/
 void TIM_OC1PolarityConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCPolarity)
 {
-  uint16_t tmpccer = 0;
+  	uint16_t tmpccer = 0;
  
-  tmpccer = TIMx->CCER;
-  /*  和通道有关  */
-  /*  TIM_CCER_CC1P  通道  */
-  tmpccer &= (uint16_t)~((uint16_t)(1 << TIM_CH_NUM));
-  /*  TIM_CCER_CC1E_Pos == 0  */
-  tmpccer |= (uint16_t)(TIM_OCPolarity << (TIM_CH_NUM - 1));
+  	tmpccer = TIMx->CCER;
+  	/*  和通道有关  */
+  	/*  TIM_CCER_CC1P  通道  */
+  	tmpccer &= (uint16_t)~((uint16_t)(1 << TIM_CH_NUM));
+  	/*  TIM_CCER_CC1E_Pos == 0  */
+  	tmpccer |= (uint16_t)(TIM_OCPolarity << (TIM_CH_NUM - 1));
  
-  TIMx->CCER = tmpccer;
+  	TIMx->CCER = tmpccer;
 }
  
 /**********************************************************************************************************
@@ -267,7 +267,7 @@ void TIM_OC1PolarityConfig(TIM_TypeDef* TIMx, uint16_t TIM_OCPolarity)
 *********************************************************************************************************/
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    if(htim->Instance == INFRA_TIM_REG)
+    	if(htim->Instance == INFRA_TIM_REG)
 	{
 		Infrared_TIM_Period();
 	}
@@ -282,7 +282,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 *********************************************************************************************************/
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
-    if(htim->Instance == INFRA_TIM_REG)
+    	if(htim->Instance == INFRA_TIM_REG)
 	{
 		Infrared_TIM_Capture();
 	}
