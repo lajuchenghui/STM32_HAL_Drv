@@ -8,33 +8,32 @@
   */
 uint32_t SPI_Flash_FATFS_Init(FATFS *fs, const char *disk_path)
 {
-    /*  path空间大小影响文件扫描 当存在文件名大于path空间大小 程序卡死  */
+	/*  path空间大小影响文件扫描 当存在文件名大于path空间大小 程序卡死  */
   
-    if(FATFS_mount(fs, disk_path) != 1)return 0;
+	if(FATFS_mount(fs, disk_path) != 1)return 0;
         
-    if(FATFS_write_read_test(disk_path) != 1)return 0;
+	if(FATFS_write_read_test(disk_path) != 1)return 0;
 	
-    if(FATFS_seek_printf_test(fs, disk_path) != 1)return 0;
+	if(FATFS_seek_printf_test(fs, disk_path) != 1)return 0;
 
-    if(FATFS_opendir_test(disk_path) != 1)return 0;
-    
-    FATFS_scan_disk(disk_path);
-    
-    return 1;
-    /*  fat write read test end  */
+	if(FATFS_opendir_test(disk_path) != 1)return 0;
+	
+	FATFS_scan_disk(disk_path);
+	
+	return 1;
+	/*  fat write read test end  */
 }
 
 uint32_t SDRAM_FATFS_Init(FATFS *fs, const char *disk_path)
 {
 	uint32_t tot,fre;
 	
-	
 	FATFS_mount(fs, disk_path);
-    FATFS_format_disk(fs, disk_path);
+	FATFS_format_disk(fs, disk_path);
 	FATFS_file_cpy(disk_path, (const char *)USERPath, "img_p1.bin");
 	FATFS_file_cpy(disk_path, (const char *)USERPath, "img_p2.bin");
 	FATFS_scan_disk(disk_path);
-		
+	
 	FATFS_getfree(fs, disk_path , &tot, &fre);
 
 	return 1;
@@ -53,7 +52,7 @@ uint32_t FATFS_file_to_flash(uint32_t dst_addr, const char *src_path, const char
 	uint32_t buf_cpy[FILE_CPY_BUF_SIZE];
 	
 	uint8_t src_file_path[40] = {0};
-    uint8_t dst_file_path[40] = {0};
+	uint8_t dst_file_path[40] = {0};
 	
 	__msg("FATFS_file_to_flash dst_addr == 0x%x src_path == %s file_name == %s\r\n", dst_addr, src_path, file_name);
 	if((src_path == NULL) || (file_name == NULL))
@@ -66,15 +65,15 @@ uint32_t FATFS_file_to_flash(uint32_t dst_addr, const char *src_path, const char
 	/*  打开源文件  */
 	f_res = f_open(&file_src, src_file_path, FA_OPEN_EXISTING | FA_READ);
 	if(f_res != FR_OK)
-    {
-        __msg("FATFS open source file fail\r\n");
-        printf_fatfs_error(f_res);
-        return 0;
-    }
+	{
+		__msg("FATFS open source file fail\r\n");
+		printf_fatfs_error(f_res);
+		return 0;
+	}
 	
 	/*  得到大小并分割  */
-    file_size = f_size(&file_src);
-    __msg("file size == %lu B\r\n", file_size);
+	file_size = f_size(&file_src);
+	__msg("file size == %lu B\r\n", file_size);
 	cpy_cnt = file_size / FILE_CPY_BUF_SIZE;
 	cpy_remainder = file_size % FILE_CPY_BUF_SIZE;
 	__msg("FATFS_file_cpy source file cpy_cnt == %d cpy_remainder == %d\r\n", cpy_cnt, cpy_remainder);
@@ -83,7 +82,7 @@ uint32_t FATFS_file_to_flash(uint32_t dst_addr, const char *src_path, const char
 	{
 		for(i=0;i<cpy_cnt;i++)
 		{
-            __msg("f_read start\r\n");
+			__msg("f_read start\r\n");
 			f_res = f_read(&file_src, buf_cpy, FILE_CPY_BUF_SIZE, &fnum); 
 			if(f_res != FR_OK)
 			{
@@ -95,7 +94,7 @@ uint32_t FATFS_file_to_flash(uint32_t dst_addr, const char *src_path, const char
 			__msg("source file read bytes == %u B\r\n", fnum);
 			
 			//write	flash
-            W25_Flash_Write_Sector(dst_addr + i, buf_cpy);
+            		W25_Flash_Write_Sector(dst_addr + i, buf_cpy);
 			
 			f_res = f_lseek(&file_src, FILE_CPY_BUF_SIZE * (i + 1));
 			if(f_res != FR_OK)
@@ -110,11 +109,11 @@ uint32_t FATFS_file_to_flash(uint32_t dst_addr, const char *src_path, const char
 		
 		if(cpy_remainder != 0)
 		{   
-            /*  不够一个扇区的 填充1个扇区  */
-            for(j=0;j<FILE_CPY_BUF_SIZE-cpy_remainder;j++)
-            {
-                buf_cpy[cpy_remainder + j] = 0xff;
-            }
+			/*  不够一个扇区的 填充1个扇区  */
+            		for(j=0;j<FILE_CPY_BUF_SIZE-cpy_remainder;j++)
+            		{
+                		buf_cpy[cpy_remainder + j] = 0xff;
+            		}
             
 			f_res = f_read(&file_src, buf_cpy, cpy_remainder, &fnum); 
 			if(f_res != FR_OK)
@@ -126,21 +125,21 @@ uint32_t FATFS_file_to_flash(uint32_t dst_addr, const char *src_path, const char
 			__msg("FATFS read file secc\r\n");
 			__msg("source file read bytes == %u B\r\n", fnum);
 			
-            //write	flash
-            W25_Flash_Write_Sector(dst_addr + i, buf_cpy);
+            		//write	flash
+            		W25_Flash_Write_Sector(dst_addr + i, buf_cpy);
             
 			__msg("destination file write bytes == %u B\r\n", fnum);	
 		}
 		
 	}
-    /*  要复制的大小 小于或等于缓冲 不需要分多次来复制  */
+    	/*  要复制的大小 小于或等于缓冲 不需要分多次来复制  */
 	else if(file_size != 0)
 	{
-        /*  不够一个扇区的 填充1个扇区  */
-        for(j=0;j<FILE_CPY_BUF_SIZE-file_size;j++)
-        {
-            buf_cpy[file_size + j] = 0xff;
-        }
+        	/*  不够一个扇区的 填充1个扇区  */
+        	for(j=0;j<FILE_CPY_BUF_SIZE-file_size;j++)
+        	{
+            		buf_cpy[file_size + j] = 0xff;
+        	}
             
 		f_res = f_read(&file_src, buf_cpy, file_size, &fnum); 
 		if(f_res != FR_OK)
@@ -153,20 +152,19 @@ uint32_t FATFS_file_to_flash(uint32_t dst_addr, const char *src_path, const char
 		__msg("source file read bytes == %u B\r\n", fnum);
 		
 		//write	flash
-        W25_Flash_Write_Sector(dst_addr + i + 1, buf_cpy);
+        	W25_Flash_Write_Sector(dst_addr + i + 1, buf_cpy);
 		__msg("destination file write bytes == %u B\r\n", fnum);
 		
 	}
 	/*  关闭文件  */
 	f_res = f_close(&file_src);
 	if(f_res != FR_OK)
-    {
-        __msg("FATFS clost file fail\r\n");
-        printf_fatfs_error(f_res);
-        return 0;
-    }
+	{
+        	__msg("FATFS clost file fail\r\n");
+        	printf_fatfs_error(f_res);
+        	return 0;
+	}
 	__msg("FATFS clost file secc\r\n");
-
 
 	return 1;
 }
@@ -185,7 +183,7 @@ uint32_t FATFS_file_cpy(const char *dst_path, const char *src_path, const char *
 	uint32_t buf_cpy[FILE_CPY_BUF_SIZE];
 	
 	uint8_t src_file_path[40] = {0};
-    uint8_t dst_file_path[40] = {0};
+    	uint8_t dst_file_path[40] = {0};
 	
 	__msg("FATFS_file_cpy dst_path == %s src_path == %s file_name == %s\r\n", dst_path, src_path, file_name);
 	if((dst_path == NULL) || (src_path == NULL) || (file_name == NULL))
@@ -199,24 +197,24 @@ uint32_t FATFS_file_cpy(const char *dst_path, const char *src_path, const char *
 	/*  打开源文件  */
 	f_res = f_open(&file_src, src_file_path, FA_OPEN_EXISTING | FA_READ);
 	if(f_res != FR_OK)
-    {
-        __msg("FATFS open source file fail\r\n");
-        printf_fatfs_error(f_res);
-        return 0;
-    }
+    	{
+       		__msg("FATFS open source file fail\r\n");
+        	printf_fatfs_error(f_res);
+        	return 0;
+    	}
 	__msg("FATFS open source file secc\r\n");
 	/*  打开目标文件  */
 	f_res = f_open(&file_dst, dst_file_path, FA_CREATE_ALWAYS  | FA_WRITE);
 	if(f_res != FR_OK)
-    {
-        __msg("FATFS open destination file fail\r\n");
-        printf_fatfs_error(f_res);
-        return 0;
-    }
+    	{
+        	__msg("FATFS open destination file fail\r\n");
+        	printf_fatfs_error(f_res);
+        	return 0;
+    	}
 	__msg("FATFS open destination file secc\r\n");
 	/*  得到大小并分割  */
-    file_size = f_size(&file_src);
-    __msg("file size == %u B\r\n", file_size);
+    	file_size = f_size(&file_src);
+    	__msg("file size == %u B\r\n", file_size);
 	cpy_cnt = file_size / FILE_CPY_BUF_SIZE;
 	cpy_remainder = file_size % FILE_CPY_BUF_SIZE;
 	__msg("FATFS_file_cpy source file cpy_cnt == %d cpy_remainder == %d\r\n", cpy_cnt, cpy_remainder);
@@ -288,7 +286,7 @@ uint32_t FATFS_file_cpy(const char *dst_path, const char *src_path, const char *
 		}
 		
 	}
-    /*  要复制的大小小于或等于缓冲 不需要分多次来复制  */
+    	/*  要复制的大小小于或等于缓冲 不需要分多次来复制  */
 	else
 	{
 		f_res = f_read(&file_src, buf_cpy, file_size, &fnum); 
@@ -315,19 +313,19 @@ uint32_t FATFS_file_cpy(const char *dst_path, const char *src_path, const char *
 	/*  关闭文件  */
 	f_res = f_close(&file_src);
 	if(f_res != FR_OK)
-    {
-        __msg("FATFS clost file fail\r\n");
-        printf_fatfs_error(f_res);
-        return 0;
-    }
+    	{
+        	__msg("FATFS clost file fail\r\n");
+        	printf_fatfs_error(f_res);
+        	return 0;
+    	}
 	__msg("FATFS clost file secc\r\n");
 	f_res = f_close(&file_dst);
 	if(f_res != FR_OK)
-    {
-        __msg("FATFS clost file fail\r\n");
-        printf_fatfs_error(f_res);
-        return 0;
-    }
+    	{
+        	__msg("FATFS clost file fail\r\n");
+        	printf_fatfs_error(f_res);
+        	return 0;
+    	}
 	__msg("FATFS clost file secc\r\n");
 
 	return 1;
@@ -338,15 +336,15 @@ FATFS系统会占用0-0x46的扇区（0-70）
 */
 uint32_t FATFS_sector_cpy(const Diskio_drvTypeDef *dst, const Diskio_drvTypeDef *src, uint32_t num)
 {
-    uint32_t i;
-    uint8_t buf[4096];
-    
-    for(i=0;i<num;i++)
-    {   
-        src->disk_read(0, buf, i, 1);
-        dst->disk_write(0, buf, i, 1);
-    }
-    
+	uint32_t i;
+	uint8_t buf[4096];
+	
+	for(i=0;i<num;i++)
+	{   
+	    src->disk_read(0, buf, i, 1);
+	    dst->disk_write(0, buf, i, 1);
+	}
+	
 	return 1;
 }
 /**
